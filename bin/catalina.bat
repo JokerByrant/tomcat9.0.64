@@ -116,6 +116,7 @@ rem ---------------------------------------------------------------------------
 setlocal
 
 rem Suppress Terminate batch job on CTRL+C
+:: 判断启动Tomcat时是否设置了参数，如果没有设置，跳到mainEntry代码段
 if not ""%1"" == ""run"" goto mainEntry
 if "%TEMP%" == "" goto mainEntry
 if exist "%TEMP%\%~nx0.run" goto mainEntry
@@ -128,9 +129,11 @@ set RETVAL=%ERRORLEVEL%
 del /Q "%TEMP%\%~nx0.Y" >NUL 2>&1
 exit /B %RETVAL%
 :mainEntry
+:: 移除一个临时文件
 del /Q "%TEMP%\%~nx0.run" >NUL 2>&1
 
 rem Guess CATALINA_HOME if not defined
+:: 判断CATALINA_HOME路径中是否包含catalina.bat
 set "CURRENT_DIR=%cd%"
 if not "%CATALINA_HOME%" == "" goto gotHome
 set "CATALINA_HOME=%CURRENT_DIR%"
@@ -148,6 +151,7 @@ goto end
 
 rem Copy CATALINA_BASE from CATALINA_HOME if not defined
 if not "%CATALINA_BASE%" == "" goto gotBase
+:: 将CATALINA_HOME赋给变量CATALINA_BASE
 set "CATALINA_BASE=%CATALINA_HOME%"
 :gotBase
 
@@ -156,12 +160,15 @@ rem as this is used as the separator in the classpath and Java provides no
 rem mechanism for escaping if the same character appears in the path. Check this
 rem by replacing all occurrences of ';' with '' and checking that neither
 rem CATALINA_HOME nor CATALINA_BASE have changed
+:: 确保CATALINA_HOME和CATALINA_BASE都不包含分号。因为它用作类路径中的分隔符，而Java不提供。
+:: 将所有出现的“；”替换为“”
 if "%CATALINA_HOME%" == "%CATALINA_HOME:;=%" goto homeNoSemicolon
 echo Using CATALINA_HOME:   "%CATALINA_HOME%"
 echo Unable to start as CATALINA_HOME contains a semicolon (;) character
 goto end
 :homeNoSemicolon
 
+:: 将所有出现的“；”替换为“”
 if "%CATALINA_BASE%" == "%CATALINA_BASE:;=%" goto baseNoSemicolon
 echo Using CATALINA_BASE:   "%CATALINA_BASE%"
 echo Unable to start as CATALINA_BASE contains a semicolon (;) character
@@ -170,22 +177,27 @@ goto end
 
 rem Ensure that any user defined CLASSPATH variables are not used on startup,
 rem but allow them to be specified in setenv.bat, in rare case when it is needed.
+:: 确保在启动时不使用任何用户定义的CLASSPATH变量，但允许在setenv.bat中指定它们，在极少数情况下需要这样做。
 set CLASSPATH=
 
 rem Get standard environment variables
+:: 获取标准环境变量
 if not exist "%CATALINA_BASE%\bin\setenv.bat" goto checkSetenvHome
 call "%CATALINA_BASE%\bin\setenv.bat"
 goto setenvDone
 :checkSetenvHome
+:: 执行setenv.bat，获得CLASSPATH
 if exist "%CATALINA_HOME%\bin\setenv.bat" call "%CATALINA_HOME%\bin\setenv.bat"
 :setenvDone
 
 rem Get standard Java environment variables
+:: 获取标准Java环境变量
 if exist "%CATALINA_HOME%\bin\setclasspath.bat" goto okSetclasspath
 echo Cannot find "%CATALINA_HOME%\bin\setclasspath.bat"
 echo This file is needed to run this program
 goto end
 :okSetclasspath
+:: 执行setclasspath.bat，设置环境变量
 call "%CATALINA_HOME%\bin\setclasspath.bat" %1
 if errorlevel 1 goto end
 
@@ -195,6 +207,7 @@ rem quotes into the CLASSPATH
 if "%CLASSPATH%" == "" goto emptyClasspath
 set "CLASSPATH=%CLASSPATH%;"
 :emptyClasspath
+:: 将拿到的ClassPath路径与CATALINA_HOME路径拼接在一起，找到拼接后路径下的bootstrap.jar文件。bootstrap.jar是启动tomcat的环境.
 set "CLASSPATH=%CLASSPATH%%CATALINA_HOME%\bin\bootstrap.jar"
 
 if not "%CATALINA_TMPDIR%" == "" goto gotTmpdir
@@ -270,13 +283,17 @@ echo Using JAVA_HOME:       "%JAVA_HOME%"
 echo Using CLASSPATH:       "%CLASSPATH%"
 echo Using CATALINA_OPTS:   "%CATALINA_OPTS%"
 
+:: 设置了jdk中bin目录下的java.exe文件路径
 set _EXECJAVA=%_RUNJAVA%
+:: 设置了tomcat的启动类为Bootstrap这个类. (后面会分析这个类)
 set MAINCLASS=org.apache.catalina.startup.Bootstrap
+:: 设置tomcat启动
 set ACTION=start
 set SECURITY_POLICY_FILE=
 set DEBUG_OPTS=
 set JPDA=
 
+:: 接着判断第一个参数是否是jpda, 是则进行一些设定. 而正常情况下第一个参数是start, 所以跳过这段代码.
 if not ""%1"" == ""jpda"" goto noJpda
 set JPDA=jpda
 if not "%JPDA_TRANSPORT%" == "" goto gotJpdaTransport
@@ -294,6 +311,7 @@ set JPDA_OPTS=-agentlib:jdwp=transport=%JPDA_TRANSPORT%,address=%JPDA_ADDRESS%,s
 shift
 :noJpda
 
+:: 接着会判断第一个参数的内容, 根据判断, 我们会跳到doStart代码段. (debug, run方式同上)
 if ""%1"" == ""debug"" goto doDebug
 if ""%1"" == ""run"" goto doRun
 if ""%1"" == ""start"" goto doStart
@@ -337,6 +355,7 @@ goto execCmd
 shift
 if "%TITLE%" == "" set TITLE=Tomcat
 set _EXECJAVA=start "%TITLE%" %_RUNJAVA%
+:: 设置一些必要的参数后，跳转到execCmde代码段
 if not ""%1"" == ""-security"" goto execCmd
 shift
 echo Using Security Manager
@@ -362,6 +381,7 @@ goto end
 
 :execCmd
 rem Get remaining unshifted command line arguments and save them in the
+:: 可拼接参数, 把参数拼接到一个叫CMD_LINE_ARGS的变量中,
 set CMD_LINE_ARGS=
 :setArgs
 if ""%1""=="""" goto doneSetArgs
@@ -373,6 +393,8 @@ goto setArgs
 rem Execute Java with the applicable properties
 if not "%JPDA%" == "" goto doJpda
 if not "%SECURITY_POLICY_FILE%" == "" goto doSecurity
+:: _EXECJAVA也就是_RUNJAVA, 也就是平时说的java指令, 但在之前的doStart代码块中把_EXECJAVA改为了start "%TITLE%" %_RUNJAVA%, 所以系统会另启一个命令行窗口, 名字叫Tomcat.
+:: 在拼接一系列参数后, 我们会看见%MAINCLASS%, 也就是org.apache.catalina.startup.Bootstrap启动类, 拼接完启动参数后, 最后拼接的是%ACTION%, 也就是start.
 %_EXECJAVA% %CATALINA_LOGGING_CONFIG% %LOGGING_MANAGER% %JAVA_OPTS% %CATALINA_OPTS% %DEBUG_OPTS% -D%ENDORSED_PROP%="%JAVA_ENDORSED_DIRS%" -classpath "%CLASSPATH%" -Dcatalina.base="%CATALINA_BASE%" -Dcatalina.home="%CATALINA_HOME%" -Djava.io.tmpdir="%CATALINA_TMPDIR%" %MAINCLASS% %CMD_LINE_ARGS% %ACTION%
 goto end
 :doSecurity
