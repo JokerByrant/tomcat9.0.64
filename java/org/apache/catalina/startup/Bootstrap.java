@@ -16,6 +16,12 @@
  */
 package org.apache.catalina.startup;
 
+import org.apache.catalina.security.SecurityClassLoad;
+import org.apache.catalina.startup.ClassLoaderFactory.Repository;
+import org.apache.catalina.startup.ClassLoaderFactory.RepositoryType;
+import org.apache.juli.logging.Log;
+import org.apache.juli.logging.LogFactory;
+
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -26,12 +32,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
-import org.apache.catalina.security.SecurityClassLoad;
-import org.apache.catalina.startup.ClassLoaderFactory.Repository;
-import org.apache.catalina.startup.ClassLoaderFactory.RepositoryType;
-import org.apache.juli.logging.Log;
-import org.apache.juli.logging.LogFactory;
 
 /**
  * Bootstrap loader for Catalina.  This application constructs a class loader
@@ -131,8 +131,11 @@ public final class Bootstrap {
      */
     private Object catalinaDaemon = null;
 
+    // 负责加载Tomcat和Web应用都复用的类，它们对 Tomcat 内部类和所有 Web 应用程序都是可见的
     ClassLoader commonLoader = null;
+    // 负责加载Tomcat专用的类，而这些被加载的类在Web应用中将不可见
     ClassLoader catalinaLoader = null;
+    // 负责加载Tomcat下所有的Web应用程序都复用的类，而这些被加载的类在Tomcat中将不可见
     ClassLoader sharedLoader = null;
 
 
@@ -141,11 +144,13 @@ public final class Bootstrap {
 
     private void initClassLoaders() {
         try {
+            // commonLoader是顶层ClassLoader
             commonLoader = createClassLoader("common", null);
             if (commonLoader == null) {
                 // no config file, default to this loader - we might be in a 'single' env.
                 commonLoader = this.getClass().getClassLoader();
             }
+            // catalinaLoader 和 sharedLoader的 parentClassLoader 是 commonLoader
             catalinaLoader = createClassLoader("server", commonLoader);
             sharedLoader = createClassLoader("shared", commonLoader);
         } catch (Throwable t) {
@@ -159,6 +164,9 @@ public final class Bootstrap {
     private ClassLoader createClassLoader(String name, ClassLoader parent)
         throws Exception {
 
+        // 从 catalina.properties 中找 common.loader, shared.loader, server.loader 对应的值
+        // 可以去 catalina.properties 中看一下：shared.loader, server.loader是没有值的。
+        // 关于具体加载了哪些信息可以去 [官方文档](https://tomcat.apache.org/tomcat-9.0-doc/class-loader-howto.html) 查看
         String value = CatalinaProperties.getProperty(name + ".loader");
         if ((value == null) || (value.equals(""))) {
             return parent;
@@ -166,10 +174,11 @@ public final class Bootstrap {
 
         value = replace(value);
 
+
         List<Repository> repositories = new ArrayList<>();
-
+        // 从获取到的 value 中找出所有的路径
         String[] repositoryPaths = getPaths(value);
-
+        // 将这些路径放到repositories中
         for (String repository : repositoryPaths) {
             // Check for a JAR URL repository
             try {
@@ -193,6 +202,7 @@ public final class Bootstrap {
             }
         }
 
+        // 将 repositories 传入下面的方法中，该方法返回 URLClassLoader
         return ClassLoaderFactory.createClassLoader(repositories, parent);
     }
 
@@ -249,19 +259,26 @@ public final class Bootstrap {
      */
     public void init() throws Exception {
 
+        // 初始化classloader（包括catalinaLoader）
         initClassLoaders();
 
+        // 设置当前的线程的contextClassLoader为catalinaLoader
+        // contextClassLoader是用来解决双亲委派模型无法适用Tomcat框架的，具体见：https://pdai.tech/md/framework/tomcat/tomcat-x-classloader.html#tomcat%E7%B1%BB%E5%8A%A0%E8%BD%BD%E6%9C%BA%E5%88%B6%E6%98%AF%E6%80%8E%E4%B9%88%E6%A0%B7%E7%9A%84%E5%91%A2
         Thread.currentThread().setContextClassLoader(catalinaLoader);
 
         SecurityClassLoad.securityClassLoad(catalinaLoader);
 
+        // 通过catalinaLoader加载Catalina，并初始化startupInstance 对象
         // Load our startup class and call its process() method
         if (log.isDebugEnabled()) {
             log.debug("Loading startup class");
         }
+        // 使用catalinaLoader加载org.apache.catalina.startup.Catalina类
         Class<?> startupClass = catalinaLoader.loadClass("org.apache.catalina.startup.Catalina");
+        // 并创建了一个对象：startupInstance
         Object startupInstance = startupClass.getConstructor().newInstance();
 
+        // 通过反射调用 setParentClassLoader 方法，为startupInstance设置classLoader
         // Set the shared extensions class loader
         if (log.isDebugEnabled()) {
             log.debug("Setting startup class properties");
@@ -270,11 +287,13 @@ public final class Bootstrap {
         Class<?> paramTypes[] = new Class[1];
         paramTypes[0] = Class.forName("java.lang.ClassLoader");
         Object paramValues[] = new Object[1];
+        // 设置的classLoader是sharedClassLoader
         paramValues[0] = sharedLoader;
         Method method =
             startupInstance.getClass().getMethod(methodName, paramTypes);
         method.invoke(startupInstance, paramValues);
 
+        // 将处理好的 Catalina 对象赋值给 catalinaDaemon
         catalinaDaemon = startupInstance;
     }
 
@@ -302,6 +321,7 @@ public final class Bootstrap {
         if (log.isDebugEnabled()) {
             log.debug("Calling startup class " + method);
         }
+        // 调用catalinaDaemon的load方法
         method.invoke(catalinaDaemon, param);
     }
 
@@ -436,7 +456,7 @@ public final class Bootstrap {
      * @param args Command line arguments to be processed
      */
     public static void main(String args[]) {
-
+        // 创建一个 Bootstrap 对象，调用它的 init 方法初始化
         synchronized (daemonLock) {
             if (daemon == null) {
                 // Don't set daemon until init() has completed
@@ -457,7 +477,9 @@ public final class Bootstrap {
             }
         }
 
+        // 根据启动参数，分别调用 Bootstrap 对象的不同方法
         try {
+            // 默认命令是start
             String command = "start";
             if (args.length > 0) {
                 command = args[args.length - 1];
