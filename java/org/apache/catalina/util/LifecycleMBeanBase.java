@@ -16,9 +16,6 @@
  */
 package org.apache.catalina.util;
 
-import javax.management.MBeanServer;
-import javax.management.ObjectName;
-
 import org.apache.catalina.Globals;
 import org.apache.catalina.JmxEnabled;
 import org.apache.catalina.LifecycleException;
@@ -27,6 +24,10 @@ import org.apache.juli.logging.LogFactory;
 import org.apache.tomcat.util.modeler.Registry;
 import org.apache.tomcat.util.res.StringManager;
 
+import javax.management.MBeanServer;
+import javax.management.ObjectName;
+
+// 继承LifecycleBase是为了生命周期的管理，实现JmxEnabled是为了组件的拓展管理
 public abstract class LifecycleMBeanBase extends LifecycleBase
         implements JmxEnabled {
 
@@ -198,6 +199,7 @@ public abstract class LifecycleMBeanBase extends LifecycleBase
 
     /**
      * Not used - NOOP.
+     * 在执行卸载之后的方法
      */
     @Override
     public final void postDeregister() {
@@ -207,6 +209,7 @@ public abstract class LifecycleMBeanBase extends LifecycleBase
 
     /**
      * Not used - NOOP.
+     * 在注册之后执行的方法，比如注册失败提供报错信息
      */
     @Override
     public final void postRegister(Boolean registrationDone) {
@@ -216,6 +219,7 @@ public abstract class LifecycleMBeanBase extends LifecycleBase
 
     /**
      * Not used - NOOP.
+     * 在卸载前执行的方法
      */
     @Override
     public final void preDeregister() throws Exception {
@@ -224,6 +228,7 @@ public abstract class LifecycleMBeanBase extends LifecycleBase
 
 
     /**
+     * 在注册之前执行的方法，如果发生异常，MBean不会注册到MBean Server中
      * Allows the object to be registered with an alternative
      * {@link MBeanServer} and/or {@link ObjectName}.
      */

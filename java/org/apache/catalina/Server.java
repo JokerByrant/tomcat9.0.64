@@ -16,11 +16,11 @@
  */
 package org.apache.catalina;
 
-import java.io.File;
-import java.util.concurrent.ScheduledExecutorService;
-
 import org.apache.catalina.deploy.NamingResourcesImpl;
 import org.apache.catalina.startup.Catalina;
+
+import java.io.File;
+import java.util.concurrent.ScheduledExecutorService;
 
 /**
  * A <code>Server</code> element represents the entire Catalina
