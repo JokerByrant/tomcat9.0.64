@@ -17,21 +17,6 @@
 package org.apache.catalina.startup;
 
 
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.lang.reflect.Constructor;
-import java.net.ConnectException;
-import java.net.Socket;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-import java.util.logging.LogManager;
-
 import org.apache.catalina.Container;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
@@ -52,6 +37,17 @@ import org.apache.tomcat.util.log.SystemLogHandler;
 import org.apache.tomcat.util.res.StringManager;
 import org.xml.sax.Attributes;
 import org.xml.sax.InputSource;
+
+import java.io.*;
+import java.lang.reflect.Constructor;
+import java.net.ConnectException;
+import java.net.Socket;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.logging.LogManager;
 
 
 /**
@@ -548,7 +544,10 @@ public class Catalina {
 
     }
 
-
+    /**
+     * server.xml的解析
+     * @param start
+     */
     protected void parseServerXml(boolean start) {
         // Set configuration source
         ConfigFileLoader.setSource(new CatalinaBaseConfigurationSource(Bootstrap.getCatalinaBaseFile(), getConfigFile()));
@@ -690,9 +689,10 @@ public class Catalina {
 
     /**
      * Start a new server instance.
+     * Catalina 的加载过程
      */
     public void load() {
-
+        // 已加载则退出
         if (loaded) {
             return;
         }
@@ -700,12 +700,15 @@ public class Catalina {
 
         long t1 = System.nanoTime();
 
+        // 该方法已弃用
         initDirs();
 
         // Before digester - it may be needed
+        // 设置额外的系统变量
         initNaming();
 
         // Parse main server.xml
+        // 解析server.xml
         parseServerXml(true);
         Server s = getServer();
         if (s == null) {
@@ -755,7 +758,7 @@ public class Catalina {
      * Start a new server instance.
      */
     public void start() {
-
+        // 如果server属性为null，则重新加载Catalina
         if (getServer() == null) {
             load();
         }
@@ -769,6 +772,7 @@ public class Catalina {
 
         // Start the new server
         try {
+            // 核心方法，启动服务
             getServer().start();
         } catch (LifecycleException e) {
             log.fatal(sm.getString("catalina.serverStartFail"), e);
@@ -794,6 +798,8 @@ public class Catalina {
             if (shutdownHook == null) {
                 shutdownHook = new CatalinaShutdownHook();
             }
+            // 注册一个关闭钩子，用来优雅的关闭Tomcat，任务是清理应用程序运行时产生的资源.
+            // 触发的时机是服务被正常的关闭了，这时JVM会调用所有已注册的关闭钩子. 但是如果JVM被强行关闭了，这些钩子将不会被触发.
             Runtime.getRuntime().addShutdownHook(shutdownHook);
 
             // If JULI is being used, disable JULI's shutdown hook since
@@ -806,8 +812,11 @@ public class Catalina {
             }
         }
 
+        // 通过start命令启动Tomcat时，await被设置为true
         if (await) {
+            // 等待线程终止
             await();
+            // 线程终止后关闭Tomcat
             stop();
         }
     }
@@ -822,6 +831,7 @@ public class Catalina {
             // Remove the ShutdownHook first so that server.stop()
             // doesn't get invoked twice
             if (useShutdownHook) {
+                // 移除关闭钩子，防止重复调用
                 Runtime.getRuntime().removeShutdownHook(shutdownHook);
 
                 // If JULI is being used, re-enable JULI's shutdown to ensure
@@ -846,7 +856,9 @@ public class Catalina {
                     && LifecycleState.DESTROYED.compareTo(state) >= 0) {
                 // Nothing to do. stop() was already called
             } else {
+                // 关闭服务
                 s.stop();
+                // 销毁服务
                 s.destroy();
             }
         } catch (LifecycleException e) {
@@ -993,6 +1005,7 @@ public class Catalina {
         public void run() {
             try {
                 if (getServer() != null) {
+                    // 关闭Tomcat服务
                     Catalina.this.stop();
                 }
             } catch (Throwable ex) {

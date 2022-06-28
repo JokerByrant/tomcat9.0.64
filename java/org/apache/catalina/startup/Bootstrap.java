@@ -321,7 +321,7 @@ public final class Bootstrap {
         if (log.isDebugEnabled()) {
             log.debug("Calling startup class " + method);
         }
-        // 调用catalinaDaemon的load方法
+        // 调用Catalina.class的load()方法
         method.invoke(catalinaDaemon, param);
     }
 
@@ -361,6 +361,7 @@ public final class Bootstrap {
             init();
         }
 
+        // 调用Catalina.class的start()方法
         Method method = catalinaDaemon.getClass().getMethod("start", (Class [])null);
         method.invoke(catalinaDaemon, (Object [])null);
     }
@@ -493,8 +494,11 @@ public final class Bootstrap {
                 args[args.length - 1] = "stop";
                 daemon.stop();
             } else if (command.equals("start")) {
+                // 将await参数设置为true, 作用是在调用start()启动Tomcat后，等待用户输入shutdown命令，收到这个命令后执行stop()关闭Tomcat
                 daemon.setAwait(true);
+                // 加载Catalina，初始化组件
                 daemon.load(args);
+                // 启动Catalina
                 daemon.start();
                 if (null == daemon.getServer()) {
                     System.exit(1);
