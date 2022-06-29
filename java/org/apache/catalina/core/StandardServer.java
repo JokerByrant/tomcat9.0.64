@@ -16,37 +16,7 @@
  */
 package org.apache.catalina.core;
 
-import java.beans.PropertyChangeListener;
-import java.beans.PropertyChangeSupport;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.InetAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
-import java.net.SocketTimeoutException;
-import java.net.URISyntaxException;
-import java.net.URL;
-import java.net.URLClassLoader;
-import java.security.AccessControlException;
-import java.util.Random;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
-
-import javax.management.InstanceNotFoundException;
-import javax.management.MBeanException;
-import javax.management.MBeanServer;
-import javax.management.ObjectName;
-
-import org.apache.catalina.Context;
-import org.apache.catalina.Lifecycle;
-import org.apache.catalina.LifecycleException;
-import org.apache.catalina.LifecycleState;
-import org.apache.catalina.Server;
-import org.apache.catalina.Service;
+import org.apache.catalina.*;
 import org.apache.catalina.deploy.NamingResourcesImpl;
 import org.apache.catalina.mbeans.MBeanFactory;
 import org.apache.catalina.startup.Catalina;
@@ -60,6 +30,20 @@ import org.apache.tomcat.util.buf.StringCache;
 import org.apache.tomcat.util.modeler.Registry;
 import org.apache.tomcat.util.res.StringManager;
 import org.apache.tomcat.util.threads.TaskThreadFactory;
+
+import javax.management.InstanceNotFoundException;
+import javax.management.MBeanException;
+import javax.management.MBeanServer;
+import javax.management.ObjectName;
+import java.beans.PropertyChangeListener;
+import java.beans.PropertyChangeSupport;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.*;
+import java.security.AccessControlException;
+import java.util.Random;
+import java.util.concurrent.*;
 
 
 /**
@@ -408,11 +392,13 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
 
 
     /**
+     * 获取内部线程数
      * Handles the special values.
      */
     private static int getUtilityThreadsInternal(int utilityThreads) {
         int result = utilityThreads;
         if (result <= 0) {
+            // `Runtime.getRuntime().availableProcessors()`: 可供虚拟机使用的最大处理器数量
             result = Runtime.getRuntime().availableProcessors() + result;
             if (result < 2) {
                 result = 2;
@@ -436,6 +422,10 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
     }
 
 
+    /**
+     * 配置线程池，线程池中只指定了corePoolSize
+     * @param threads
+     */
     private void reconfigureUtilityExecutor(int threads) {
         synchronized (utilityExecutorLock) {
             // The ScheduledThreadPoolExecutor doesn't use MaximumPoolSize, only CorePoolSize is available
@@ -505,6 +495,7 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
         service.setServer(this);
 
         synchronized (servicesLock) {
+            // 数组扩容，然后将新的Service添加到末尾
             Service results[] = new Service[services.length + 1];
             System.arraycopy(services, 0, results, 0, services.length);
             results[services.length] = service;
@@ -512,12 +503,14 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
 
             if (getState().isAvailable()) {
                 try {
+                    // 启动Service
                     service.start();
                 } catch (LifecycleException e) {
                     // Ignore
                 }
             }
 
+            // 通知观察者
             // Report this property change to interested listeners
             support.firePropertyChange("service", null, service);
         }
@@ -561,6 +554,7 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
         if (getPortWithOffset() == -1) {
             try {
                 awaitThread = Thread.currentThread();
+                // 每10s检测一次
                 while(!stopAwait) {
                     try {
                         Thread.sleep( 10000 );
@@ -576,6 +570,7 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
 
         // Set up a server socket to wait on
         try {
+            // 创建一个Socket连接，端口号使用计算过偏移量之后的端口，address没有配置则使用localhost，用来接收shutdown命令
             awaitSocket = new ServerSocket(getPortWithOffset(), 1,
                     InetAddress.getByName(address));
         } catch (IOException e) {
@@ -643,6 +638,7 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
                         if (ch < 32 || ch == 127) {
                             break;
                         }
+                        // 读取Socket接收到的数据
                         command.append((char) ch);
                         expected--;
                     }
@@ -658,9 +654,11 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
                 }
 
                 // Match against our command string
+                // 判断接收到的命令是否与事先指定的shutdown命令吻合
                 boolean match = command.toString().equals(shutdown);
                 if (match) {
                     log.info(sm.getString("standardServer.shutdownViaPort"));
+                    // 命令正确跳出循环
                     break;
                 } else {
                     log.warn(sm.getString("standardServer.invalidShutdownCommand", command.toString()));
@@ -674,6 +672,7 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
             // Close the server socket and return
             if (serverSocket != null) {
                 try {
+                    // 关闭socket连接
                     serverSocket.close();
                 } catch (IOException e) {
                     // Ignore
@@ -686,7 +685,7 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
     /**
      * @return the specified Service (if it exists); otherwise return
      * <code>null</code>.
-     *
+     * 获取指定名称的Service
      * @param name Name of the Service to be returned
      */
     @Override
@@ -728,7 +727,7 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
     /**
      * Remove the specified Service from the set associated from this
      * Server.
-     *
+     * 移除指定的Service
      * @param service The Service to be removed
      */
     @Override
@@ -736,6 +735,7 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
 
         synchronized (servicesLock) {
             int j = -1;
+            // 找到指定service对应的下标
             for (int i = 0; i < services.length; i++) {
                 if (service == services[i]) {
                     j = i;
@@ -746,10 +746,12 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
                 return;
             }
             try {
+                // 关闭service
                 services[j].stop();
             } catch (LifecycleException e) {
                 // Ignore
             }
+            // 重新分配数组空间
             int k = 0;
             Service results[] = new Service[services.length - 1];
             for (int i = 0; i < services.length; i++) {
@@ -759,6 +761,7 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
             }
             services = results;
 
+            // 通知观察者
             // Report this property change to interested listeners
             support.firePropertyChange("service", service, null);
         }
@@ -912,7 +915,7 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
     /**
      * Start nested components ({@link Service}s) and implement the requirements
      * of {@link org.apache.catalina.util.LifecycleBase#startInternal()}.
-     *
+     * 启动嵌套在当前Server下的Service
      * @exception LifecycleException if this component detects a fatal error
      *  that prevents this component from being used
      */
@@ -921,16 +924,18 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
 
         fireLifecycleEvent(CONFIGURE_START_EVENT, null);
         setState(LifecycleState.STARTING);
-
+        // 调用LifecycleBase.start()
         globalNamingResources.start();
 
         // Start our defined Services
+        // 启动所有的Service
         synchronized (servicesLock) {
             for (Service service : services) {
                 service.start();
             }
         }
 
+        // 每60s执行一次startPeriodicLifecycleEvent()，periodicEventDelay是在startPeriodicLifecycleEvent()中轮询执行fireLifecycleEvent()的间隔
         if (periodicEventDelay > 0) {
             monitorFuture = getUtilityExecutor().scheduleWithFixedDelay(
                     () -> startPeriodicLifecycleEvent(), 0, 60, TimeUnit.SECONDS);
@@ -948,6 +953,7 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
                     log.error(sm.getString("standardServer.periodicEventError"), e);
                 }
             }
+            // 轮询触发 `PERIODIC_EVENT` 监听事件
             periodicLifecycleEventFuture = getUtilityExecutor().scheduleAtFixedRate(
                     () -> fireLifecycleEvent(Lifecycle.PERIODIC_EVENT, null), periodicEventDelay, periodicEventDelay, TimeUnit.SECONDS);
         }
@@ -984,12 +990,14 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
 
         globalNamingResources.stop();
 
+        // 关闭用来接收 `ShutDown` 指令的 `Socket` 连接
         stopAwait();
     }
 
     /**
      * Invoke a pre-startup initialization. This is used to allow connectors
      * to bind to restricted ports under Unix operating environments.
+     * 初始化Server，完成一些属性的初始化和注册，并将所有的Service初始化
      */
     @Override
     protected void initInternal() throws LifecycleException {
@@ -997,6 +1005,7 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
         super.initInternal();
 
         // Initialize utility executor
+        // 配置线程池
         reconfigureUtilityExecutor(getUtilityThreadsInternal(utilityThreads));
         register(utilityExecutor, "type=UtilityExecutor");
 
@@ -1029,6 +1038,8 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
                                 File f = new File (url.toURI());
                                 if (f.isFile() &&
                                         f.getName().endsWith(".jar")) {
+                                    // 获取jar包的manifest文件信息，manifest文件定义了jar包的基本信息，包含创建人、版本、启动类等信息
+                                    // 这个信息会在之后启动Context组件时进行验证，见StandardContext.startInternal()方法
                                     ExtensionValidator.addSystemResource(f);
                                 }
                             } catch (URISyntaxException | IOException e) {
@@ -1040,6 +1051,7 @@ public final class StandardServer extends LifecycleMBeanBase implements Server {
                 cl = cl.getParent();
             }
         }
+        // 初始化所有的Service
         // Initialize our defined Services
         for (Service service : services) {
             service.init();

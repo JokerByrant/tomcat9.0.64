@@ -708,7 +708,7 @@ public class Catalina {
         initNaming();
 
         // Parse main server.xml
-        // 解析server.xml
+        // 解析server.xml，Tomcat中的组件都是在这里完成的初始化，例如Server、Service等
         parseServerXml(true);
         Server s = getServer();
         if (s == null) {
@@ -724,6 +724,7 @@ public class Catalina {
 
         // Start the new server
         try {
+            // 初始化服务
             getServer().init();
         } catch (LifecycleException e) {
             if (Boolean.getBoolean("org.apache.catalina.startup.EXIT_ON_INIT_FAILURE")) {
@@ -760,6 +761,7 @@ public class Catalina {
     public void start() {
         // 如果server属性为null，则重新加载Catalina
         if (getServer() == null) {
+            // load()方法会调用getServer().init()方法，为getServer().start()做启动前的初始化工作
             load();
         }
 
@@ -814,7 +816,7 @@ public class Catalina {
 
         // 通过start命令启动Tomcat时，await被设置为true
         if (await) {
-            // 等待线程终止
+            // 等待线程终止，每10s检测一次
             await();
             // 线程终止后关闭Tomcat
             stop();

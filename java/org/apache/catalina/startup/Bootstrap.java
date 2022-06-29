@@ -496,7 +496,7 @@ public final class Bootstrap {
             } else if (command.equals("start")) {
                 // 将await参数设置为true, 作用是在调用start()启动Tomcat后，等待用户输入shutdown命令，收到这个命令后执行stop()关闭Tomcat
                 daemon.setAwait(true);
-                // 加载Catalina，初始化组件
+                // 加载Catalina，初始化组件，例如Server、Service等
                 daemon.load(args);
                 // 启动Catalina
                 daemon.start();

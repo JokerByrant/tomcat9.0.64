@@ -77,7 +77,7 @@ public interface Server extends Lifecycle {
 
     /**
      * Set the port number we listen to for shutdown commands.
-     *
+     * 该服务器等待关闭命令的TCP / IP端口号。设置为-1禁用关闭端口。
      * @param port The new port number
      *
      * @see #setPortOffset(int)
@@ -88,7 +88,7 @@ public interface Server extends Lifecycle {
      * Get the number that offsets the port used for shutdown commands.
      * For example, if port is 8005, and portOffset is 1000,
      * the server listens at 9005.
-     *
+     * 获取用于关闭命令的端口偏移量。例如，如果端口为8005，而端口偏移量为1000，则服务器在9005处监听。
      * @return the port offset
      */
     public int getPortOffset();
@@ -106,7 +106,7 @@ public interface Server extends Lifecycle {
      * Get the actual port on which server is listening for the shutdown commands.
      * If you do not set port offset, port is returned. If you set
      * port offset, port offset + port is returned.
-     *
+     * 获取服务器监听关机命令的实际端口。如果不设置端口偏移量，则返回端口。如果设置端口偏移量，则返回端口偏移量+端口。
      * @return the port with offset
      */
     public int getPortWithOffset();
@@ -119,7 +119,7 @@ public interface Server extends Lifecycle {
 
     /**
      * Set the address on which we listen to for shutdown commands.
-     *
+     * 该服务器等待关闭命令的TCP / IP地址。如果未指定地址，localhost则使用。
      * @param address The new address
      */
     public void setAddress(String address);
@@ -133,7 +133,7 @@ public interface Server extends Lifecycle {
 
     /**
      * Set the shutdown command we are waiting for.
-     *
+     * 设置shutdown指令，这个指令用来关闭Server
      * @param shutdown The new shutdown command
      */
     public void setShutdown(String shutdown);
@@ -201,6 +201,7 @@ public interface Server extends Lifecycle {
 
     /**
      * Get the utility thread count.
+     * 获取此service中用于各种实用程序任务（包括重复执行的线程）的线程数
      * @return the thread count
      */
     public int getUtilityThreads();
