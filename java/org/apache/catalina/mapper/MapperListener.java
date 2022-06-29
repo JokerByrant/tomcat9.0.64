@@ -16,27 +16,14 @@
  */
 package org.apache.catalina.mapper;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import org.apache.catalina.Container;
-import org.apache.catalina.ContainerEvent;
-import org.apache.catalina.ContainerListener;
-import org.apache.catalina.Context;
-import org.apache.catalina.Engine;
-import org.apache.catalina.Host;
-import org.apache.catalina.Lifecycle;
-import org.apache.catalina.LifecycleEvent;
-import org.apache.catalina.LifecycleException;
-import org.apache.catalina.LifecycleListener;
-import org.apache.catalina.LifecycleState;
-import org.apache.catalina.Service;
-import org.apache.catalina.WebResourceRoot;
-import org.apache.catalina.Wrapper;
+import org.apache.catalina.*;
 import org.apache.catalina.util.LifecycleMBeanBase;
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
 import org.apache.tomcat.util.res.StringManager;
+
+import java.util.ArrayList;
+import java.util.List;
 
 
 /**
@@ -95,16 +82,17 @@ public class MapperListener extends LifecycleMBeanBase
     public void startInternal() throws LifecycleException {
 
         setState(LifecycleState.STARTING);
-
+        // 获取Engine
         Engine engine = service.getContainer();
         if (engine == null) {
             return;
         }
-
+        // 获取Engine中配置的DefaultHost(一般是`localhost`), 将其赋值给Mapper
         findDefaultHost();
-
+        // 将当前监听器-MapperListener添加到Engine及其子容器中
         addListeners(engine);
 
+        // 注册engine下面的host、context和wrapper，registerHost会注册host及下面的子容器
         Container[] conHosts = engine.findChildren();
         for (Container conHost : conHosts) {
             Host host = (Host) conHost;
@@ -124,6 +112,7 @@ public class MapperListener extends LifecycleMBeanBase
         if (engine == null) {
             return;
         }
+        // 将当前监听器-MapperListener从Engine及其子容器中移除
         removeListeners(engine);
     }
 
@@ -261,11 +250,13 @@ public class MapperListener extends LifecycleMBeanBase
 
     private void findDefaultHost() {
 
+        // 获取Engine的DefaultHost(一般是`localhost`)
         Engine engine = service.getContainer();
         String defaultHost = engine.getDefaultHost();
 
         boolean found = false;
 
+        // 判断找到的DefaultHost是否在Engine的子Host列表中
         if (defaultHost != null && defaultHost.length() > 0) {
             Container[] containers = engine.findChildren();
 
@@ -286,6 +277,7 @@ public class MapperListener extends LifecycleMBeanBase
             }
         }
 
+        // 如果找到了，则将其配置到mapper中
         if (found) {
             mapper.setDefaultHostName(defaultHost);
         } else {
@@ -295,13 +287,16 @@ public class MapperListener extends LifecycleMBeanBase
 
 
     /**
+     * 将Engine的子容器Host添加到Mapper中，并将Host的子容器Context添加到Mapper中
      * Register host.
      */
     private void registerHost(Host host) {
 
         String[] aliases = host.findAliases();
+        // 将Engine的子容器Host添加到Mapper中
         mapper.addHost(host.getName(), aliases, host);
 
+        // 将Host的子容器Context添加到Mapper中
         for (Container container : host.findChildren()) {
             if (container.getState().isAvailable()) {
                 registerContext((Context) container);
@@ -309,6 +304,7 @@ public class MapperListener extends LifecycleMBeanBase
         }
 
         // Default host may have changed
+        // 重新为Mapper配置DefalutHost
         findDefaultHost();
 
         if(log.isDebugEnabled()) {
@@ -366,10 +362,11 @@ public class MapperListener extends LifecycleMBeanBase
 
 
     /**
+     * 将Host的子容器Context添加到Mapper中
      * Register context.
      */
     private void registerContext(Context context) {
-
+        // contextPath如果为斜杠，则统一转换为空字符串
         String contextPath = context.getPath();
         if ("/".equals(contextPath)) {
             contextPath = "";
@@ -380,7 +377,9 @@ public class MapperListener extends LifecycleMBeanBase
         String[] welcomeFiles = context.findWelcomeFiles();
         List<WrapperMappingInfo> wrappers = new ArrayList<>();
 
+        // 将context下面的每个wrapper都添加到mapper
         for (Container container : context.findChildren()) {
+            // 准备wrapper信息，以便后续插入mapper
             prepareWrapperMappingInfo(context, (Wrapper) container, wrappers);
 
             if(log.isDebugEnabled()) {
@@ -389,6 +388,7 @@ public class MapperListener extends LifecycleMBeanBase
             }
         }
 
+        // 将context添加到mapper
         mapper.addContextVersion(host.getName(), host, contextPath,
                 context.getWebappVersion(), context, welcomeFiles, resources,
                 wrappers);
@@ -455,6 +455,7 @@ public class MapperListener extends LifecycleMBeanBase
     }
 
     /*
+     * 该方法就是将映射url、wrapper名字和资源只读标记等信息组合成对象添加到wrappers中。
      * Populate <code>wrappers</code> list with information for registration of
      * mappings for this wrapper in this context.
      */
@@ -506,6 +507,7 @@ public class MapperListener extends LifecycleMBeanBase
 
 
     /**
+     * 将当前监听器-MapperListener添加到Engine及其子容器中
      * Add this mapper to the container and all child containers
      *
      * @param container the container (and any associated childern) to which
@@ -521,6 +523,7 @@ public class MapperListener extends LifecycleMBeanBase
 
 
     /**
+     * 将当前监听器-MapperListener从Engine及其子容器中移除
      * Remove this mapper from the container and all child containers
      *
      * @param container the container (and any associated childern) from which

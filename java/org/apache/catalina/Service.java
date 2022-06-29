@@ -44,7 +44,7 @@ public interface Service extends Lifecycle {
     /**
      * Set the <code>Engine</code> that handles requests for all
      * <code>Connectors</code> associated with this Service.
-     *
+     * 设置Engine
      * @param engine The new Engine
      */
     public void setContainer(Engine engine);
@@ -56,7 +56,7 @@ public interface Service extends Lifecycle {
 
     /**
      * Set the name of this Service.
-     *
+     * 设置Service Name
      * @param name The new service name
      */
     public void setName(String name);
@@ -99,7 +99,7 @@ public interface Service extends Lifecycle {
     /**
      * Add a new Connector to the set of defined Connectors, and associate it
      * with this Service's Container.
-     *
+     * 添加一个 Connector
      * @param connector The Connector to be added
      */
     public void addConnector(Connector connector);
@@ -122,6 +122,7 @@ public interface Service extends Lifecycle {
 
     /**
      * Adds a named executor to the service
+     * 添加一个 Executor
      * @param ex Executor
      */
     public void addExecutor(Executor ex);

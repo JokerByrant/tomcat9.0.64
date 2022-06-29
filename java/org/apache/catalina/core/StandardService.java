@@ -17,20 +17,7 @@
 package org.apache.catalina.core;
 
 
-import java.beans.PropertyChangeListener;
-import java.beans.PropertyChangeSupport;
-import java.util.ArrayList;
-
-import javax.management.ObjectName;
-
-import org.apache.catalina.Container;
-import org.apache.catalina.Engine;
-import org.apache.catalina.Executor;
-import org.apache.catalina.JmxEnabled;
-import org.apache.catalina.LifecycleException;
-import org.apache.catalina.LifecycleState;
-import org.apache.catalina.Server;
-import org.apache.catalina.Service;
+import org.apache.catalina.*;
 import org.apache.catalina.connector.Connector;
 import org.apache.catalina.mapper.Mapper;
 import org.apache.catalina.mapper.MapperListener;
@@ -38,6 +25,11 @@ import org.apache.catalina.util.LifecycleMBeanBase;
 import org.apache.juli.logging.Log;
 import org.apache.juli.logging.LogFactory;
 import org.apache.tomcat.util.res.StringManager;
+
+import javax.management.ObjectName;
+import java.beans.PropertyChangeListener;
+import java.beans.PropertyChangeSupport;
+import java.util.ArrayList;
 
 
 /**
@@ -89,13 +81,14 @@ public class StandardService extends LifecycleMBeanBase implements Service {
     private ClassLoader parentClassLoader = null;
 
     /**
-     * Mapper.
+     * Mapper是 Tomcat 处理 Http 请求时非常重要的组件。Tomcat 使用 Mapper 来处理一个 Request 到 Host、Context 的映射关系，从而决定使用哪个 Service 来处理请求。
      */
     protected final Mapper mapper = new Mapper();
 
 
     /**
-     * Mapper listener.
+     * MapperListener中持有mapper和service两个成员变量，在构造函数中完成初始化
+     * 作用是在 start 的时候将容器类对象注册到 Mapper 对象中
      */
     protected final MapperListener mapperListener = new MapperListener(this);
 
@@ -129,10 +122,12 @@ public class StandardService extends LifecycleMBeanBase implements Service {
 
     @Override
     public void setContainer(Engine engine) {
+        // 每个Service元素只能有一个Engine元素，这里将旧的Engine作废
         Engine oldEngine = this.engine;
         if (oldEngine != null) {
             oldEngine.setService(null);
         }
+        // 设置新的Engine
         this.engine = engine;
         if (this.engine != null) {
             this.engine.setService(this);
@@ -140,12 +135,13 @@ public class StandardService extends LifecycleMBeanBase implements Service {
         if (getState().isAvailable()) {
             if (this.engine != null) {
                 try {
+                    // 启动Engine
                     this.engine.start();
                 } catch (LifecycleException e) {
                     log.error(sm.getString("standardService.engine.startFailed"), e);
                 }
             }
-            // Restart MapperListener to pick up new engine.
+            // 重启Mapper - Restart MapperListener to pick up new engine.
             try {
                 mapperListener.stop();
             } catch (LifecycleException e) {
@@ -156,6 +152,7 @@ public class StandardService extends LifecycleMBeanBase implements Service {
             } catch (LifecycleException e) {
                 log.error(sm.getString("standardService.mapperListener.startFailed"), e);
             }
+            // 关闭旧Engine
             if (oldEngine != null) {
                 try {
                     oldEngine.stop();
@@ -165,6 +162,7 @@ public class StandardService extends LifecycleMBeanBase implements Service {
             }
         }
 
+        // 触发container属性变更事件
         // Report this property change to interested listeners
         support.firePropertyChange("container", oldEngine, this.engine);
     }
@@ -215,13 +213,14 @@ public class StandardService extends LifecycleMBeanBase implements Service {
     /**
      * Add a new Connector to the set of defined Connectors, and associate it
      * with this Service's Container.
-     *
+     * 添加一个新的Conntector，并将它和当前的Service关联
      * @param connector The Connector to be added
      */
     @Override
     public void addConnector(Connector connector) {
-
+        // 数组扩容
         synchronized (connectorsLock) {
+            // 关联Service
             connector.setService(this);
             Connector results[] = new Connector[connectors.length + 1];
             System.arraycopy(connectors, 0, results, 0, connectors.length);
@@ -229,6 +228,7 @@ public class StandardService extends LifecycleMBeanBase implements Service {
             connectors = results;
         }
 
+        // 启动新添加进来的connector
         try {
             if (getState().isAvailable()) {
                 connector.start();
@@ -238,6 +238,7 @@ public class StandardService extends LifecycleMBeanBase implements Service {
                     sm.getString("standardService.connector.startFailed", connector), e);
         }
 
+        // connector改变事件
         // Report this property change to interested listeners
         support.firePropertyChange("connector", null, connector);
     }
@@ -275,7 +276,7 @@ public class StandardService extends LifecycleMBeanBase implements Service {
      * Remove the specified Connector from the set associated from this
      * Service.  The removed Connector will also be disassociated from our
      * Container.
-     *
+     * 移除Connector
      * @param connector The Connector to be removed
      */
     @Override
@@ -292,6 +293,7 @@ public class StandardService extends LifecycleMBeanBase implements Service {
             if (j < 0) {
                 return;
             }
+            // 关闭Connector
             if (connectors[j].getState().isAvailable()) {
                 try {
                     connectors[j].stop();
@@ -301,7 +303,9 @@ public class StandardService extends LifecycleMBeanBase implements Service {
                             connectors[j]), e);
                 }
             }
+            // 解绑Service
             connector.setService(null);
+            // 数组减容
             int k = 0;
             Connector results[] = new Connector[connectors.length - 1];
             for (int i = 0; i < connectors.length; i++) {
@@ -311,6 +315,7 @@ public class StandardService extends LifecycleMBeanBase implements Service {
             }
             connectors = results;
 
+            // connector改变事件
             // Report this property change to interested listeners
             support.firePropertyChange("connector", connector, null);
         }
@@ -427,21 +432,24 @@ public class StandardService extends LifecycleMBeanBase implements Service {
         setState(LifecycleState.STARTING);
 
         // Start our defined Container first
+        // 启动Engine
         if (engine != null) {
             synchronized (engine) {
                 engine.start();
             }
         }
-
+        // 启动Executors
         synchronized (executors) {
             for (Executor executor: executors) {
                 executor.start();
             }
         }
 
+        // 启动mapperListener
         mapperListener.start();
 
         // Start our defined Connectors second
+        // 启动Connector
         synchronized (connectorsLock) {
             for (Connector connector: connectors) {
                 // If it has already failed, don't try and start it
@@ -535,11 +543,13 @@ public class StandardService extends LifecycleMBeanBase implements Service {
 
         super.initInternal();
 
+        // 初始化Engine
         if (engine != null) {
             engine.init();
         }
 
         // Initialize any Executors
+        // 初始化Executors
         for (Executor executor : findExecutors()) {
             if (executor instanceof JmxEnabled) {
                 ((JmxEnabled) executor).setDomain(getDomain());
@@ -548,9 +558,11 @@ public class StandardService extends LifecycleMBeanBase implements Service {
         }
 
         // Initialize mapper listener
+        // 初始化监听器
         mapperListener.init();
 
         // Initialize our defined Connectors
+        // 初始化Connector
         synchronized (connectorsLock) {
             for (Connector connector : connectors) {
                 connector.init();
