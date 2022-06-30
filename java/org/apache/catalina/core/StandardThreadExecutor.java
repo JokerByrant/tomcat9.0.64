@@ -16,8 +16,6 @@
  */
 package org.apache.catalina.core;
 
-import java.util.concurrent.TimeUnit;
-
 import org.apache.catalina.Executor;
 import org.apache.catalina.LifecycleException;
 import org.apache.catalina.LifecycleState;
@@ -28,6 +26,8 @@ import org.apache.tomcat.util.threads.TaskQueue;
 import org.apache.tomcat.util.threads.TaskThreadFactory;
 import org.apache.tomcat.util.threads.ThreadPoolExecutor;
 
+import java.util.concurrent.TimeUnit;
+
 public class StandardThreadExecutor extends LifecycleMBeanBase
         implements Executor, ResizableExecutor {
 
@@ -35,31 +35,37 @@ public class StandardThreadExecutor extends LifecycleMBeanBase
 
     // ---------------------------------------------- Properties
     /**
+     * 执行程序中线程的线程优先级，默认为 5（Thread.NORM_PRIORITY常量的值）
      * Default thread priority
      */
     protected int threadPriority = Thread.NORM_PRIORITY;
 
     /**
+     * 线程是否应该是守护程序线程
      * Run threads in daemon or non-daemon state
      */
     protected boolean daemon = true;
 
     /**
+     * 执行程序创建的每个线程的名称前缀。单个线程的线程名称将是namePrefix+threadNumber
      * Default name prefix for the thread name
      */
     protected String namePrefix = "tomcat-exec-";
 
     /**
+     * 此池中活动线程的最大数量，默认为 200
      * max number of threads
      */
     protected int maxThreads = 200;
 
     /**
+     * 最小线程数（空闲和活动）始终保持活动状态，默认为 25
      * min number of threads
      */
     protected int minSpareThreads = 25;
 
     /**
+     * 空闲线程关闭之前的毫秒数，除非活动线程数小于或等于minSpareThreads。默认值为60000（1分钟）
      * idle time in milliseconds
      */
     protected int maxIdleTime = 60000;
@@ -75,11 +81,14 @@ public class StandardThreadExecutor extends LifecycleMBeanBase
     protected String name;
 
     /**
+     * 在我们拒绝之前可以排队等待执行的可运行任务的最大数量。默认值是Integer.MAX_VALUE
      * The maximum number of elements that can queue up before we reject them
      */
     protected int maxQueueSize = Integer.MAX_VALUE;
 
     /**
+     * 如果配置了ThreadLocalLeakPreventionListener，它将通知此执行程序有关已停止的上下文。上下文停止后，池中的线程将被更新。
+     * 为避免同时更新所有线程，此选项在任意2个线程的续订之间设置延迟。该值以ms为单位，默认值为1000ms。如果值为负，则不会续订线程。
      * After a context is stopped, threads in the pool are renewed. To avoid
      * renewing all threads at the same time, this delay is observed between 2
      * threads being renewed.
